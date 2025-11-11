@@ -1,4 +1,4 @@
-module vsystems.ca/sftp_client
+module vsystems.ca/sftpdrip
 
 go 1.24.1
 
