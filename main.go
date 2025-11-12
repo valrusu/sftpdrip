@@ -21,7 +21,6 @@ func main() {
 	dir := flag.String("dir", "", "sftp dir")
 	sleepPush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
 	sleepPull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
-	// bufferSize := flag.Int("bufsize", 100*1024*1024, "internal buffer size")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -124,6 +123,7 @@ func main() {
 
 	if *clientType == "push" {
 		// for each file
+		//		wait for the dir to be empty ( by the pull side )
 		//		load file
 		//		wait until the file disappears (deleted by the pull client)
 
@@ -131,13 +131,11 @@ func main() {
 
 		fmt.Println("files to load:", filesToLoad)
 
-		// copyBuffer := make([]byte, *bufferSize)
-
 		// to be able to start the client while another file is being downloaded, I am not uploading unless the target dir is empty
-
 		for _, fileName := range filesToLoad {
 
 			// wait until dir is empty
+			logged := false
 			for {
 				files, err := client.ReadDir(*dir)
 				if err != nil {
@@ -148,7 +146,10 @@ func main() {
 					break
 				}
 
-				log.Println("🕐 waiting for download of", len(files), "files")
+				if !logged {
+					log.Println("🕐 waiting for download of", len(files), "files", files[0])
+					logged = true
+				}
 				time.Sleep(time.Duration(*sleepPush) * time.Second)
 			}
 
