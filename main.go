@@ -63,6 +63,7 @@ func main() {
 	if *clientType == "pull" {
 
 		var prevfiles []os.FileInfo
+		logged := false
 
 		for {
 			files, err := client.ReadDir(*dir)
@@ -78,6 +79,7 @@ func main() {
 					if f.Name() == pf.Name() {
 						if f.Size() == pf.Size() {
 							log.Println("🔄 download and delete", f.Name())
+							logged = false
 
 							remoteFilePath := (*dir) + "/" + f.Name()
 							localFilePath := f.Name()
@@ -115,7 +117,10 @@ func main() {
 					}
 				}
 			}
-			log.Println("🕐 prev", len(prevfiles), "files, crt", len(files), "files")
+			if !logged {
+				log.Println("🕐 prev", len(prevfiles), "files, crt", len(files), "files")
+				logged = true
+			}
 			prevfiles = files
 			time.Sleep(time.Duration(*sleepPull) * time.Second)
 		}
