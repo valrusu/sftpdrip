@@ -19,8 +19,9 @@ func main() {
 	sftpUser := flag.String("sftpuser", "", "sftp user")
 	sftpPwd := flag.String("sftppwd", "", "sftp pwd")
 	dir := flag.String("dir", "", "sftp dir")
-	sleeppush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
-	sleeppull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
+	sleepPush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
+	sleepPull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
+	// bufferSize := flag.Int("bufsize", 100*1024*1024, "internal buffer size")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -45,7 +46,11 @@ func main() {
 	defer conn.Close()
 	log.Println("connected")
 
-	client, err := sftp.NewClient(conn)
+	client, err := sftp.NewClient(conn,
+		sftp.UseConcurrentWrites(true),        // pipeline writes
+		sftp.UseConcurrentReads(true),         // pipeline reads
+		sftp.MaxConcurrentRequestsPerFile(64), // 64 outstanding requests)
+	)
 	if err != nil {
 		log.Fatalf("Failed to create SFTP client: %v", err)
 	}
@@ -113,7 +118,7 @@ func main() {
 			}
 			log.Println("🕐 prev", len(prevfiles), "files, crt", len(files), "files")
 			prevfiles = files
-			time.Sleep(time.Duration(*sleeppull) * time.Second)
+			time.Sleep(time.Duration(*sleepPull) * time.Second)
 		}
 	}
 
@@ -125,6 +130,8 @@ func main() {
 		filesToLoad := flag.Args()
 
 		fmt.Println("files to load:", filesToLoad)
+
+		// copyBuffer := make([]byte, *bufferSize)
 
 		// to be able to start the client while another file is being downloaded, I am not uploading unless the target dir is empty
 
@@ -142,7 +149,7 @@ func main() {
 				}
 
 				log.Println("🕐 waiting for download of", len(files), "files")
-				time.Sleep(time.Duration(*sleeppush) * time.Second)
+				time.Sleep(time.Duration(*sleepPush) * time.Second)
 			}
 
 			// upload a file
@@ -157,12 +164,13 @@ func main() {
 			remoteFileName := (*dir) + "/" + fileName
 			dstFile, err := client.Create(remoteFileName)
 			if err != nil {
-				log.Panicf("create remote file: %s %w", remoteFileName, err)
+				log.Panicf("create remote file: %s %v", remoteFileName, err)
 			}
 
 			bytes, err := io.Copy(dstFile, srcFile)
+			// bytes, err := io.CopyBuffer(dstFile, srcFile, copyBuffer)
 			if err != nil {
-				log.Panicf("copy data: %w", err)
+				log.Panicf("copy data: %s %v", remoteFileName, err)
 			}
 
 			log.Printf("wrote %s %d\n", remoteFileName, bytes)
