@@ -19,8 +19,8 @@ func main() {
 	sftpUser := flag.String("sftpuser", "", "sftp user")
 	sftpPwd := flag.String("sftppwd", "", "sftp pwd")
 	dir := flag.String("dir", "", "sftp dir")
-	sleeppush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
-	sleeppull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
+	sleepPush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
+	sleepPull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -45,7 +45,11 @@ func main() {
 	defer conn.Close()
 	log.Println("connected")
 
-	client, err := sftp.NewClient(conn)
+	client, err := sftp.NewClient(conn,
+		sftp.UseConcurrentWrites(true),        // pipeline writes
+		sftp.UseConcurrentReads(true),         // pipeline reads
+		sftp.MaxConcurrentRequestsPerFile(64), // 64 outstanding requests)
+	)
 	if err != nil {
 		log.Fatalf("Failed to create SFTP client: %v", err)
 	}
@@ -59,6 +63,7 @@ func main() {
 	if *clientType == "pull" {
 
 		var prevfiles []os.FileInfo
+		logged := false
 
 		for {
 			files, err := client.ReadDir(*dir)
@@ -74,6 +79,7 @@ func main() {
 					if f.Name() == pf.Name() {
 						if f.Size() == pf.Size() {
 							log.Println("🔄 download and delete", f.Name())
+							logged = false
 
 							remoteFilePath := (*dir) + "/" + f.Name()
 							localFilePath := f.Name()
@@ -111,14 +117,18 @@ func main() {
 					}
 				}
 			}
-			log.Println("🕐 prev", len(prevfiles), "files, crt", len(files), "files")
+			if !logged {
+				log.Println("🕐 prev", len(prevfiles), "files, crt", len(files), "files")
+				logged = true
+			}
 			prevfiles = files
-			time.Sleep(time.Duration(*sleeppull) * time.Second)
+			time.Sleep(time.Duration(*sleepPull) * time.Second)
 		}
 	}
 
 	if *clientType == "push" {
 		// for each file
+		//		wait for the dir to be empty ( by the pull side )
 		//		load file
 		//		wait until the file disappears (deleted by the pull client)
 
@@ -127,10 +137,10 @@ func main() {
 		fmt.Println("files to load:", filesToLoad)
 
 		// to be able to start the client while another file is being downloaded, I am not uploading unless the target dir is empty
-
 		for _, fileName := range filesToLoad {
 
 			// wait until dir is empty
+			logged := false
 			for {
 				files, err := client.ReadDir(*dir)
 				if err != nil {
@@ -141,8 +151,11 @@ func main() {
 					break
 				}
 
-				log.Println("🕐 waiting for download of", len(files), "files")
-				time.Sleep(time.Duration(*sleeppush) * time.Second)
+				if !logged {
+					log.Println("🕐 waiting for download of", len(files), "files", files[0])
+					logged = true
+				}
+				time.Sleep(time.Duration(*sleepPush) * time.Second)
 			}
 
 			// upload a file
@@ -157,12 +170,13 @@ func main() {
 			remoteFileName := (*dir) + "/" + fileName
 			dstFile, err := client.Create(remoteFileName)
 			if err != nil {
-				log.Panicf("create remote file: %s %w", remoteFileName, err)
+				log.Panicf("create remote file: %s %v", remoteFileName, err)
 			}
 
 			bytes, err := io.Copy(dstFile, srcFile)
+			// bytes, err := io.CopyBuffer(dstFile, srcFile, copyBuffer)
 			if err != nil {
-				log.Panicf("copy data: %w", err)
+				log.Panicf("copy data: %s %v", remoteFileName, err)
 			}
 
 			log.Printf("wrote %s %d\n", remoteFileName, bytes)
