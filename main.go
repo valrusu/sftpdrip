@@ -72,8 +72,11 @@ func main() {
 			}
 			// log.Println("got list of files")
 
+			if len(files) == 0 && len(prevfiles) == 0 {
+				break
+			}
+
 			// files with same size can be downloaded
-		search:
 			for _, f := range files {
 				for _, pf := range prevfiles {
 					if f.Name() == pf.Name() {
@@ -109,10 +112,8 @@ func main() {
 
 							remoteFile.Close()
 							localFile.Close()
-
-							break search
 						} else {
-							log.Println(f.Name(), f.Size(), pf.Size())
+							log.Println("changed:", f.Name(), f.Size(), pf.Size())
 						}
 					}
 				}
