@@ -21,6 +21,7 @@ func main() {
 	dir := flag.String("dir", "", "sftp dir")
 	sleepPush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
 	sleepPull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
+	stopNoFiles := flag.Int("stopnofiles", 0, "stop when no files available to pull after this many tries")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -64,16 +65,25 @@ func main() {
 
 		var prevfiles []os.FileInfo
 		logged := false
+		noFiles := 0
 
 		for {
 			files, err := client.ReadDir(*dir)
 			if err != nil {
-				log.Panicf("Failed to read dir: %v", err)
+				log.Panicf("failed to read dir: %v", err)
 			}
 			// log.Println("got list of files")
 
 			if len(files) == 0 && len(prevfiles) == 0 {
-				break
+				if !logged {
+					log.Println("🕐 waiting for files")
+					logged = true
+				}
+				noFiles++
+				if *stopNoFiles > 0 && noFiles >= *stopNoFiles {
+					log.Println("no new files for a long time")
+					break
+				}
 			}
 
 			// files with same size can be downloaded
@@ -83,6 +93,7 @@ func main() {
 						if f.Size() == pf.Size() {
 							log.Println("🔄 download and delete", f.Name())
 							logged = false
+							noFiles = 0
 
 							remoteFilePath := (*dir) + "/" + f.Name()
 							localFilePath := f.Name()
@@ -90,38 +101,44 @@ func main() {
 							// Open remote file for reading
 							remoteFile, err := client.Open(remoteFilePath)
 							if err != nil {
-								log.Fatalf("Failed to open remote file: %s, %v", remoteFilePath, err)
+								log.Fatalf("failed to open remote file: %s, %v", remoteFilePath, err)
 							}
 
 							// Create local file for writing
 							localFile, err := os.Create(localFilePath)
 							if err != nil {
-								log.Fatalf("Failed to create local file: %v", err)
+								log.Fatalf("failed to create local file: %v", err)
 							}
 
 							// Copy from remote to local
 							bytesCopied, err := io.Copy(localFile, remoteFile)
 							if err != nil {
-								log.Fatalf("Failed to copy file: %v", err)
+								log.Fatalf("failed to copy file: %v", err)
 							}
 
-							fmt.Printf("✅ downloaded %s (%d bytes)\n", localFilePath, bytesCopied)
+							log.Printf("✅ downloaded %s (%d bytes)\n", localFilePath, bytesCopied)
 
-							client.Remove(remoteFilePath)
-							fmt.Printf("✅ removed %s\n", remoteFilePath)
+							if err := client.Remove(remoteFilePath); err != nil {
+								log.Panicf("Failed to remove remote file %s %v", remoteFilePath, err)
+							}
+							log.Printf("✅ removed %s\n", remoteFilePath)
 
 							remoteFile.Close()
 							localFile.Close()
 						} else {
-							log.Println("changed:", f.Name(), f.Size(), pf.Size())
+							if !logged {
+								// log.Println("file changed", f.Name(), f.Size(), pf.Size())
+								log.Println("uploading file detected", f.Name())
+								logged = true
+							}
 						}
 					}
 				}
 			}
-			if !logged {
-				log.Println("🕐 prev", len(prevfiles), "files, crt", len(files), "files")
-				logged = true
-			}
+			// if true || !logged {
+			// log.Println("🕐 prev", len(prevfiles), "files, crt", len(files), "files")
+			// logged = true
+			// }
 			prevfiles = files
 			time.Sleep(time.Duration(*sleepPull) * time.Second)
 		}
@@ -135,7 +152,7 @@ func main() {
 
 		filesToLoad := flag.Args()
 
-		fmt.Println("files to load:", filesToLoad)
+		log.Println("files to load:", filesToLoad)
 
 		// to be able to start the client while another file is being downloaded, I am not uploading unless the target dir is empty
 		for _, fileName := range filesToLoad {
@@ -153,7 +170,7 @@ func main() {
 				}
 
 				if !logged {
-					log.Println("🕐 waiting for download of", len(files), "files", files[0])
+					log.Println("🕐 waiting for download of", len(files), "files", files[0].Name())
 					logged = true
 				}
 				time.Sleep(time.Duration(*sleepPush) * time.Second)
