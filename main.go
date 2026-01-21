@@ -12,6 +12,14 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+func fileNames(fi []os.FileInfo) []string {
+	var r []string
+	for _, f := range fi {
+		r = append(r, f.Name())
+	}
+	return r
+}
+
 func main() {
 
 	clientType := flag.String("type", "", "push or pull")
@@ -26,9 +34,13 @@ func main() {
 	flag.Usage = func() {
 		flag.PrintDefaults()
 		fmt.Println()
-		fmt.Println(" © Valentin Rusu 2005 / V-Systems")
+		fmt.Println(" © Valentin Rusu 2025 / V-Systems")
 	}
 	flag.Parse()
+
+	if *clientType == "" {
+		log.Panicln("need client type push or pull")
+	}
 
 	// SFTP connection configuration
 	config := &ssh.ClientConfig{
@@ -56,10 +68,6 @@ func main() {
 	}
 	defer client.Close()
 	log.Println("client created")
-
-	if *clientType == "" {
-		log.Panicln("need client type push or pull")
-	}
 
 	if *clientType == "pull" {
 
@@ -170,7 +178,7 @@ func main() {
 				}
 
 				if !logged {
-					log.Println("🕐 waiting for download of", len(files), "files", files[0].Name())
+					log.Println("🕐 waiting for download of", len(files), "files", fileNames(files))
 					logged = true
 				}
 				time.Sleep(time.Duration(*sleepPush) * time.Second)
