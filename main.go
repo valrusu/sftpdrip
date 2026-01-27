@@ -29,7 +29,7 @@ func main() {
 	dir := flag.String("dir", "", "sftp dir")
 	sleepPush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
 	sleepPull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
-	stopNoFiles := flag.Int("stopnofiles", 0, "stop when no files available to pull after this many tries")
+	stopNoFiles := flag.Int("stopnofiles", 2, "stop when no files available to pull after this many tries")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -69,6 +69,12 @@ func main() {
 	defer client.Close()
 	log.Println("client created")
 
+	err = client.MkdirAll(*dir)
+	if err != nil {
+		log.Fatalf("Failed to use directory %s: %v", *dir, err)
+	}
+	log.Println("Opened directory", *dir)
+
 	if *clientType == "pull" {
 
 		var prevfiles []os.FileInfo
@@ -84,12 +90,13 @@ func main() {
 
 			if len(files) == 0 && len(prevfiles) == 0 {
 				if !logged {
+					// log.Printf("🕐 waiting for files [%d/%d]\n", noFiles+2, *stopNoFiles)
 					log.Println("🕐 waiting for files")
 					logged = true
 				}
 				noFiles++
 				if *stopNoFiles > 0 && noFiles >= *stopNoFiles {
-					log.Println("no new files for a long time")
+					log.Println("No new files, exiting.")
 					break
 				}
 			}
@@ -118,13 +125,18 @@ func main() {
 								log.Fatalf("failed to create local file: %v", err)
 							}
 
+							startts := time.Now()
 							// Copy from remote to local
 							bytesCopied, err := io.Copy(localFile, remoteFile)
 							if err != nil {
 								log.Fatalf("failed to copy file: %v", err)
 							}
+							endts := time.Now()
+							// transfer speed in KB/s
+							seconds := int64(endts.Sub(startts).Seconds())
+							speed := (bytesCopied / 1024) / seconds
 
-							log.Printf("✅ downloaded %s (%d bytes)\n", localFilePath, bytesCopied)
+							log.Printf("✅ downloaded %s - %d bytes in %d seconds - %d KB/s\n", localFilePath, bytesCopied, seconds, speed)
 
 							if err := client.Remove(remoteFilePath); err != nil {
 								log.Panicf("Failed to remove remote file %s %v", remoteFilePath, err)
@@ -190,7 +202,8 @@ func main() {
 
 			srcFile, err := os.Open(fileName)
 			if err != nil {
-				log.Panicf("open local file: %s %w", fileName, err)
+				// changed %w to %v to avoid fmt-specific %w (only valid with fmt.Errorf)
+				log.Panicf("open local file: %s %v", fileName, err)
 			}
 
 			remoteFileName := (*dir) + "/" + fileName
@@ -199,13 +212,17 @@ func main() {
 				log.Panicf("create remote file: %s %v", remoteFileName, err)
 			}
 
-			bytes, err := io.Copy(dstFile, srcFile)
-			// bytes, err := io.CopyBuffer(dstFile, srcFile, copyBuffer)
+			startts := time.Now()
+			bytesCopied, err := io.Copy(dstFile, srcFile)
 			if err != nil {
 				log.Panicf("copy data: %s %v", remoteFileName, err)
 			}
+			endts := time.Now()
 
-			log.Printf("wrote %s %d\n", remoteFileName, bytes)
+			seconds := int64(endts.Sub(startts).Seconds())
+			speed := (bytesCopied / 1024) / seconds
+
+			log.Printf("✅ uploaded %s - %d bytes in %d seconds - %d KB/s\n", remoteFileName, bytesCopied, seconds, speed)
 
 			dstFile.Close()
 			srcFile.Close()
