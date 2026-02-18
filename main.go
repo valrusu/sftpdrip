@@ -134,9 +134,13 @@ func main() {
 							endts := time.Now()
 							// transfer speed in KB/s
 							seconds := int64(endts.Sub(startts).Seconds())
-							speed := (bytesCopied / 1024) / seconds
 
-							log.Printf("✅ downloaded %s - %d bytes in %d seconds - %d KB/s\n", localFilePath, bytesCopied, seconds, speed)
+							if seconds == 0 {
+								log.Printf("✅ downloaded %s - %d bytes in %d seconds\n", localFilePath, bytesCopied, seconds)
+							} else {
+								speed := (bytesCopied / 1024) / seconds
+								log.Printf("✅ downloaded %s - %d bytes in %d seconds - %d KB/s\n", localFilePath, bytesCopied, seconds, speed)
+							}
 
 							if err := client.Remove(remoteFilePath); err != nil {
 								log.Panicf("Failed to remove remote file %s %v", remoteFilePath, err)
@@ -220,9 +224,12 @@ func main() {
 			endts := time.Now()
 
 			seconds := int64(endts.Sub(startts).Seconds())
-			speed := (bytesCopied / 1024) / seconds
-
-			log.Printf("✅ uploaded %s - %d bytes in %d seconds - %d KB/s\n", remoteFileName, bytesCopied, seconds, speed)
+			if seconds == 0 {
+				log.Printf("✅ uploaded %s - %d bytes in %d seconds\n", remoteFileName, bytesCopied, seconds)
+			} else {
+				speed := (bytesCopied / 1024) / seconds
+				log.Printf("✅ uploaded %s - %d bytes in %d seconds - %d KB/s\n", remoteFileName, bytesCopied, seconds, speed)
+			}
 
 			dstFile.Close()
 			srcFile.Close()

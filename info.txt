@@ -1,0 +1,5 @@
+compiled on Linux 9, ran on Linux 8:
+/home/oracle/val/sftpdrip: /lib64/libc.so.6: version `GLIBC_2.34' not found (required by /home/oracle/val/sftpdrip)
+/home/oracle/val/sftpdrip: /lib64/libc.so.6: version `GLIBC_2.32' not found (required by /home/oracle/val/sftpdrip)
+
+compiled on Linux 7, ran on Linux8: ok
