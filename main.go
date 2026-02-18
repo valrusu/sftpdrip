@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -30,6 +31,7 @@ func main() {
 	sleepPush := flag.Int("sleeppush", 10, "seconds to sleep on push side")
 	sleepPull := flag.Int("sleeppull", 10, "seconds to sleep on pull side")
 	stopNoFiles := flag.Int("stopnofiles", 2, "stop when no files available to pull after this many tries")
+	stripDirs := flag.Bool("stripdirs", true, "strip directories from file names when pushing")
 
 	flag.Usage = func() {
 		flag.PrintDefaults()
@@ -210,7 +212,13 @@ func main() {
 				log.Panicf("open local file: %s %v", fileName, err)
 			}
 
-			remoteFileName := (*dir) + "/" + fileName
+			var remoteFileName string
+			if *stripDirs {
+				// if the file name contains directories, strip them
+				remoteFileName = (*dir) + "/" + filepath.Base(fileName)
+			} else {
+				remoteFileName = (*dir) + "/" + fileName
+			}
 			dstFile, err := client.Create(remoteFileName)
 			if err != nil {
 				log.Panicf("create remote file: %s %v", remoteFileName, err)
@@ -224,7 +232,8 @@ func main() {
 			endts := time.Now()
 
 			seconds := int64(endts.Sub(startts).Seconds())
-			if seconds == 0 {
+			if seconds < 0.5 {
+				// do not display speed for very fast transfers, as it can be misleading
 				log.Printf("✅ uploaded %s - %d bytes in %d seconds\n", remoteFileName, bytesCopied, seconds)
 			} else {
 				speed := (bytesCopied / 1024) / seconds
