@@ -26,6 +26,4 @@ Start the "puller" side:
 
 # TODO
 - Accept the sftp password from the keyboard or from env. The SFTP server and user are temporary for me so this was not a priority.
-- Have a method for the "pusher" to signal the "puller" that no more files are coming, to avoid a hard disconnect.
-- Better output about program steps
 
