@@ -232,7 +232,7 @@ func main() {
 			endts := time.Now()
 
 			seconds := int64(endts.Sub(startts).Seconds())
-			if seconds < 0.5 {
+			if seconds == 0 {
 				// do not display speed for very fast transfers, as it can be misleading
 				log.Printf("✅ uploaded %s - %d bytes in %d seconds\n", remoteFileName, bytesCopied, seconds)
 			} else {
